@@ -1,136 +1,123 @@
-# StructSAR Experiments
+# StructSAR
 
-Clean runnable project code for the final architecture-recovery experiments.
+StructSAR is a reproducible experiment package for software architecture recovery with graph embedding and graph neural network models.
 
 ## Repository Layout
 
-- `src/structsar`: source code for the models, graph builders, evaluation, and runner.
-- `experiment_config.json`: paper experiment configuration.
-- `data/processed`: processed dependency and file/module CSV data.
-- `data/GT`: ground-truth labels.
+- `src/structsar`: source code for graph construction, models, clustering, evaluation, and the experiment runner.
+- `experiment_config.json`: experiment configuration used by the runner.
+- `data/processed`: processed file/module and dependency CSV data.
+- `data/GT`: ground-truth architecture labels.
 
-## Data
+Raw dependency-extraction outputs are not included.
 
-This repository includes processed experiment data and ground-truth labels:
-
-- `data/processed`
-- `data/GT`
-
-Raw Depends outputs are not committed.
-
-## Methods
+## Models
 
 - `N2V`: Node2Vec baseline.
 - `M2V`: MetaPath2Vec baseline.
-- `GAT`: homogeneous GAT with raw dependencies and LPE.
-- `GAT_GDC`: homogeneous GAT with PPR-diffused dependencies and LPE.
+- `GAT`: homogeneous GAT with dependency edges and Laplacian positional encodings.
+- `GAT_GDC`: homogeneous GAT with GDC/PPR-diffused dependency edges.
 - `HGAT`: heterogeneous GAT with file, folder, and collapsed file-dependency relations.
 
-The N2V and M2V variants and model hyperparameters are kept in `experiment_config.json`.
+## Clone
 
-## Run Experiments
+This repository uses Git LFS for processed datasets. Install Git LFS before cloning.
 
-From Anaconda Prompt:
+```bash
+git lfs install
+git clone https://github.com/sse-lnu/StructSAR.git
+cd StructSAR
+git lfs pull
+```
+
+## Install
+
+Create and activate a Python environment, then install the required scientific Python and PyTorch Geometric stack for your platform.
+
+Minimum Python packages used by the runner include:
+
+```bash
+pip install numpy pandas scikit-learn tqdm
+```
+
+Install PyTorch and PyTorch Geometric following the official instructions for your CUDA/CPU setup:
+
+- https://pytorch.org/get-started/locally/
+- https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html
+
+## Run
+
+Run all configured datasets and all methods:
+
+```bash
+PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json
+```
+
+Run selected methods:
+
+```bash
+PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --only N2V
+PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --only GAT GAT_GDC HGAT
+```
+
+Run selected datasets:
+
+```bash
+PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --datasets Bash Chrome
+PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --only GAT --datasets Chrome
+```
+
+On Windows PowerShell, set `PYTHONPATH` first:
 
 ```powershell
-cd C:\Users\JABEERAK\Architecture_Recovery\NAIM\StructGAT
-conda activate torchDL
 $env:PYTHONPATH = "src"
 python -m structsar.run_experiments --config experiment_config.json
 ```
 
-Run only selected methods:
+## Configuration
 
-```powershell
-python -m structsar.run_experiments --config experiment_config.json --only N2V
-python -m structsar.run_experiments --config experiment_config.json --only GAT GAT_GDC HGAT
-```
+The main configuration file is `experiment_config.json`.
 
-Run only selected datasets:
+Important options:
 
-```powershell
-python -m structsar.run_experiments --config experiment_config.json --datasets Bash Chrome
-python -m structsar.run_experiments --config experiment_config.json --only GAT --datasets Chrome
-```
+- `common.evaluate`: when `true`, writes evaluation metrics; when `false`, writes file-to-cluster assignments.
+- `common.exact_k` or `common.n_clusters`: exact number of clusters for `exact_k`.
+- `common.k_min` and `common.k_max`: search range for the `search` clustering row.
+- `common.k_range_overrides`: dataset-specific search ranges.
+- `common.neighbor_batch_size`: minibatch neighbor fanout, default `10`.
+- `common.batch_size`: minibatch training batch size, default `1024`.
+- `common.inference_batch_size`: minibatch inference batch size, default `1024`.
 
-You can also run with the full Python path:
+Clustering defaults:
 
-```powershell
-$env:PYTHONPATH = "src"
-C:\Users\JABEERAK\.conda\envs\torchDL\python.exe -m structsar.run_experiments --config experiment_config.json
-```
+- `N2V`: KMeans.
+- `M2V`, `GAT`, `GAT_GDC`, `HGAT`: agglomerative clustering.
 
-## Clustering Setting
+Each evaluated run writes two rows per dataset and method: one `exact_k` row and one `search` row.
 
-The final config uses agglomerative clustering globally, with N2V explicitly set to KMeans:
+## Minibatching
 
-- `common.clustering_algorithm`: `"agglomerative"`
-- `N2V.clustering_algorithm`: `"kmeans"`
+`GAT` and `GAT_GDC` automatically switch to minibatch training when a dataset has more than `common.minibatch_threshold_files` files. The default threshold is `5000`, so Chrome uses minibatching by default.
 
-When `common.evaluate` is `true`, every run writes two rows: one for `exact_k` and one for `search`.
-
-When `common.evaluate` is `false`, the runner skips evaluation metrics and writes JSON files with file-to-cluster assignments:
-
-```json
-{
-  "runs": [
-    {
-      "Dataset": "Bash",
-      "Model": "GAT",
-      "run_id": 1,
-      "clustering": "exact_k",
-      "n_clusters": 2,
-      "search_range": "5-20",
-      "total_pipeline_seconds": 12.34,
-      "assignments": [
-        {"file": "src/example.c", "cluster": 0}
-      ]
-    }
-  ]
-}
-```
-
-## GAT Minibatching
-
-`GAT` and `GAT_GDC` automatically switch to minibatch training when a dataset has more than `common.minibatch_threshold_files` files. The default threshold is `5000`, matching the large-system setting used for Chrome. Smaller systems keep the normal full-graph GAT path.
-
-Minibatch training is implemented inside `src/structsar/models/homogeneous_gat.py` and is launched through the single runner, `src/structsar/run_experiments.py`. Defaults are:
-
-- `common.neighbor_batch_size`: `10`
-- `common.batch_size`: `1024`
-- `common.inference_batch_size`: `1024`
-
-Users can override those values in `experiment_config.json`.
-
-## GAT_GDC Top-K
-
-The selected `gdc_k` values are stored in the `GAT_GDC` dataset overrides:
-
-- `HDC`, `HDF`: `16`
-- `Bash`, `C.Img`: `32`
-- `AS4`, `Hadoop`, `JabRef`: `64`
-- `TeamMates`, `A.UML`: `128`
-- `Chrome`: `16`
-
-Chrome is kept at `16` for the current experiments because its graph is much larger; larger GDC top-k values make the diffused graph expensive before batch-size experiments are finalized.
+Minibatch training is implemented in `src/structsar/models/homogeneous_gat.py` and is launched through the single runner `src/structsar/run_experiments.py`.
 
 ## Outputs
 
-Results are saved in:
+Results are written under `Results/<Model>/results.csv`.
 
-- `Results/N2V`
-- `Results/M2V`
-- `Results/GAT`
-- `Results/GAT_GDC`
-- `Results/HGAT`
-
-Each method writes one combined CSV:
+Example:
 
 ```text
-Results/<Model>/results.csv
+Results/N2V/results.csv
+Results/M2V/results.csv
+Results/GAT/results.csv
+Results/GAT_GDC/results.csv
+Results/HGAT/results.csv
 ```
 
-Each result CSV is kept clean for paper reporting:
+Each method writes one combined CSV containing all selected datasets.
+
+Result columns:
 
 ```text
 Model, Dataset, run_id, clustering, algorithm, n_clusters, search_range,
@@ -138,13 +125,12 @@ mojofm, a2a, c2c_cvg_33, c2c_cvg_50, c2c_cvg_66, c2c_cvg_80,
 ari, normalized_turbomq, turbomq, total_pipeline_seconds
 ```
 
-`n_clusters` is the exact or selected number of clusters. `search_range` records the searched cluster range, for example `5-20`. With evaluation enabled, `total_pipeline_seconds` includes model training, clustering, and metric evaluation. With evaluation disabled, the JSON assignment output reports the total runtime without metric evaluation.
+`search_range` uses a spreadsheet-safe format such as `k=5..20`.
 
-HGAT collapses dependency types into one `depends_on` relation by default through `common.collapse_hgat_dependencies: true`. Set it to `false` only when you explicitly want separate dependency-type relations.
+When `common.evaluate` is `false`, assignment JSON files are written instead, containing each file and its assigned cluster.
 
-## Useful Help
+## Help
 
-```powershell
-$env:PYTHONPATH = "src"
-python -m structsar.run_experiments --help
+```bash
+PYTHONPATH=src python -m structsar.run_experiments --help
 ```

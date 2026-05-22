@@ -334,7 +334,7 @@ def dataset_k_range(common, dataset):
 
 def format_search_range(k_range):
     values = list(k_range)
-    return f"{int(min(values))}-{int(max(values))}"
+    return f"k={int(min(values))}..{int(max(values))}"
 
 
 def load_dataset(data_dir, dataset):

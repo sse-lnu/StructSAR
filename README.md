@@ -114,12 +114,6 @@ mojofm, a2a, c2c_cvg_33, c2c_cvg_50, c2c_cvg_66, c2c_cvg_80,
 ari, normalized_turbomq, turbomq, total_pipeline_seconds
 ```
 
-`search_range` is written in a spreadsheet-safe format, for example:
-
-```text
-5_to_20
-```
-
 When `common.evaluate` is `false`, assignment JSON files are written under the corresponding `Results/<Model>/` folder.
 
 ## Help

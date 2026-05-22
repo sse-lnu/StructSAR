@@ -1,4 +1,4 @@
-# StructGAT Experiments
+# StructSAR Experiments
 
 Clean runnable project code for the final architecture-recovery experiments.
 

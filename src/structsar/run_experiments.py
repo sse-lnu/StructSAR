@@ -4,7 +4,8 @@ Typical use from Anaconda Prompt:
 
     cd C:\Users\JABEERAK\Architecture_Recovery\NAIM\StructGAT
     conda activate torchDL
-    python run_experiments.py --config experiment_config.json
+    $env:PYTHONPATH = "src"
+    python -m structsar.run_experiments --config experiment_config.json
 
 The config controls datasets, methods, output folders, and clustering. The
 global clustering choice can be "kmeans" or "agglomerative"; an experiment can
@@ -35,14 +36,15 @@ options:
 How to run:
   cd C:\\Users\\JABEERAK\\Architecture_Recovery\\NAIM\\StructGAT
   conda activate torchDL
-  python run_experiments.py --config experiment_config.json
+  $env:PYTHONPATH = "src"
+  python -m structsar.run_experiments --config experiment_config.json
 
 Run only selected methods:
-  python run_experiments.py --config experiment_config.json --only N2V
-  python run_experiments.py --config experiment_config.json --only GAT GAT_GDC HGAT
+  python -m structsar.run_experiments --config experiment_config.json --only N2V
+  python -m structsar.run_experiments --config experiment_config.json --only GAT GAT_GDC HGAT
 
 Run only selected datasets:
-  python run_experiments.py --config experiment_config.json --datasets Bash Chrome
+  python -m structsar.run_experiments --config experiment_config.json --datasets Bash Chrome
 
 Clustering is controlled in experiment_config.json:
   common "clustering_algorithm": "agglomerative"
@@ -69,17 +71,17 @@ import torch
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from StructGAT.eval import Clusterer, append_csv, clean_csv_schema
-    from StructGAT.data_builders import HeterogeneousData, Node2VecGraph, build_metapath_graph
-    from StructGAT.data_builders.homogeneous_graph import normalize_df
-    from StructGAT.models import (
+    from structsar.eval import Clusterer, append_csv, clean_csv_schema
+    from structsar.data_builders import HeterogeneousData, Node2VecGraph, build_metapath_graph
+    from structsar.data_builders.homogeneous_graph import normalize_df
+    from structsar.models import (
         train_heterogeneous_gat_embeddings,
         train_homogeneous_gat_embeddings,
         train_metapath2vec_embeddings,
         train_node2vec_embeddings,
     )
-    from StructGAT.models.heterogeneous_gat import lpe_features as hetero_lpe_features
-    from StructGAT.models.homogeneous_gat import (
+    from structsar.models.heterogeneous_gat import lpe_features as hetero_lpe_features
+    from structsar.models.homogeneous_gat import (
         HomogeneousFileGraphData,
         gdc_edge_index_approx,
         gdc_edge_index,

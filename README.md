@@ -2,6 +2,13 @@
 
 Clean runnable project code for the final architecture-recovery experiments.
 
+## Repository Layout
+
+- `src/structsar`: source code for the models, graph builders, evaluation, and runner.
+- `experiment_config.json`: paper experiment configuration.
+- `data/processed`: processed dependency and file/module CSV data.
+- `data/GT`: ground-truth labels.
+
 ## Data
 
 This repository includes processed experiment data and ground-truth labels:
@@ -28,27 +35,29 @@ From Anaconda Prompt:
 ```powershell
 cd C:\Users\JABEERAK\Architecture_Recovery\NAIM\StructGAT
 conda activate torchDL
-python run_experiments.py --config experiment_config.json
+$env:PYTHONPATH = "src"
+python -m structsar.run_experiments --config experiment_config.json
 ```
 
 Run only selected methods:
 
 ```powershell
-python run_experiments.py --config experiment_config.json --only N2V
-python run_experiments.py --config experiment_config.json --only GAT GAT_GDC HGAT
+python -m structsar.run_experiments --config experiment_config.json --only N2V
+python -m structsar.run_experiments --config experiment_config.json --only GAT GAT_GDC HGAT
 ```
 
 Run only selected datasets:
 
 ```powershell
-python run_experiments.py --config experiment_config.json --datasets Bash Chrome
-python run_experiments.py --config experiment_config.json --only GAT --datasets Chrome
+python -m structsar.run_experiments --config experiment_config.json --datasets Bash Chrome
+python -m structsar.run_experiments --config experiment_config.json --only GAT --datasets Chrome
 ```
 
 You can also run with the full Python path:
 
 ```powershell
-C:\Users\JABEERAK\.conda\envs\torchDL\python.exe run_experiments.py --config experiment_config.json
+$env:PYTHONPATH = "src"
+C:\Users\JABEERAK\.conda\envs\torchDL\python.exe -m structsar.run_experiments --config experiment_config.json
 ```
 
 ## Clustering Setting
@@ -85,7 +94,7 @@ When `common.evaluate` is `false`, the runner skips evaluation metrics and write
 
 `GAT` and `GAT_GDC` automatically switch to minibatch training when a dataset has more than `common.minibatch_threshold_files` files. The default threshold is `5000`, matching the large-system setting used for Chrome. Smaller systems keep the normal full-graph GAT path.
 
-Minibatch training is implemented inside `models/homogeneous_gat.py` and is launched through the single runner, `run_experiments.py`. Defaults are:
+Minibatch training is implemented inside `src/structsar/models/homogeneous_gat.py` and is launched through the single runner, `src/structsar/run_experiments.py`. Defaults are:
 
 - `common.neighbor_batch_size`: `10`
 - `common.batch_size`: `1024`
@@ -136,5 +145,6 @@ HGAT collapses dependency types into one `depends_on` relation by default throug
 ## Useful Help
 
 ```powershell
-python run_experiments.py --help
+$env:PYTHONPATH = "src"
+python -m structsar.run_experiments --help
 ```

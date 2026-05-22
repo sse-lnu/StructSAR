@@ -1,0 +1,230 @@
+{
+  "common": {
+    "data_dir": "data\\processed",
+    "out_dir": "Results",
+    "evaluate": true,
+    "collapse_hgat_dependencies": true,
+    "auto_minibatch_gat": true,
+    "minibatch_threshold_files": 5000,
+    "neighbor_batch_size": 10,
+    "batch_size": 1024,
+    "inference_batch_size": 1024,
+    "datasets": [
+      "A.UML",
+      "AS4",
+      "Bash",
+      "C.Img",
+      "Hadoop",
+      "HDC",
+      "HDF",
+      "JabRef",
+      "Lucene",
+      "TeamMates",
+      "Chrome"
+    ],
+    "include_datasets": [],
+    "exclude_datasets": [],
+    "num_runs": 100,
+    "flush_every": 1,
+    "random_state": null,
+    "clustering_algorithm": "agglomerative",
+    "exact_k": null,
+    "use_embedding_cache": false,
+    "embedding_cache_dir": null,
+    "k_min": 5,
+    "k_max": 20,
+    "k_range_overrides": {
+      "AS4": {
+        "k_min": 40,
+        "k_max": 70
+      },
+      "Hadoop": {
+        "k_min": 40,
+        "k_max": 70
+      },
+      "C.Img": {
+        "k_min": 10,
+        "k_max": 25
+      },
+      "Chrome": {
+        "k_min": 55,
+        "k_max": 75
+      }
+    }
+  },
+  "experiments": [
+    {
+      "name": "N2V",
+      "method": "negar",
+      "clustering_algorithm": "kmeans",
+      "output_path": [
+        "N2V"
+      ],
+      "dataset_overrides": {
+        "Chrome": {
+          "epochs": 1,
+          "negative": 1,
+          "workers": 4
+        }
+      },
+      "settings": {
+        "Method": "N2V",
+        "walk_length": 30,
+        "p": 1.0,
+        "q": 1.0,
+        "epochs": 5,
+        "dimensions": 128,
+        "num_walks": 100,
+        "window": 15,
+        "negative": 5,
+        "workers": 4
+      }
+    },
+    {
+      "name": "M2V",
+      "method": "metapath2vec",
+      "output_path": ["M2V"],
+      "settings": {
+        "Method": "M2V",
+        "embedding_dim": 64,
+        "walk_length": 15,
+        "context_size": 5,
+        "walks_per_node": 40,
+        "num_negative_samples": 1,
+        "epochs": 20,
+        "batch_size": 32,
+        "lr": 0.05,
+        "sparse": true
+      }
+    },
+
+    {
+      "name": "gat",
+      "method": "homogeneous_gat",
+      "output_path": [
+        "GAT"
+      ],
+      "dataset_overrides": {
+        "Chrome": {
+          "hidden_channels": 128,
+          "num_layers": 1,
+          "heads": 1,
+          "neg_ratio": 1.0,
+          "epochs": 50
+        }
+      },
+      "settings": {
+        "Method": "GAT",
+        "lpe_dim": 32,
+        "lpe_is_undirected": true,
+        "file_emb_dim": 128,
+        "num_layers": 2,
+        "hidden_channels": 256,
+        "heads": 2,
+        "variational": true,
+        "beta_kl": 0.1,
+        "neg_ratio": 5.0,
+        "epochs": 100,
+        "lr": 0.001,
+        "dropout": 0.00
+      }
+    },
+
+    {
+      "name": "gat_gdc",
+      "method": "homogeneous_gat",
+      "output_path": [
+        "GAT_GDC"
+      ],
+      "dataset_overrides": {
+        "HDC": {
+          "gdc_k": 16,
+          "num_layers": 2
+        },
+        "HDF": {
+          "gdc_k": 16,
+          "num_layers": 2
+        },
+        "Bash": {
+          "gdc_k": 64,
+           "num_layers": 2
+        },
+        "C.Img": {
+          "gdc_k": 32,
+          "num_layers": 2
+        },
+        "AS4": {
+          "gdc_k": 64
+        },
+        "Hadoop": {
+          "gdc_k": 64
+        },
+        "JabRef": {
+          "gdc_k": 64,
+          "num_layers": 2
+        },
+        "TeamMates": {
+          "gdc_k": 128
+        },
+        "A.UML": {
+          "gdc_k": 128
+        },
+        "Chrome": {
+          "hidden_channels": 128,
+          "heads": 1,
+          "neg_ratio": 1.0,
+          "epochs": 50,
+          "gdc_k": 32
+        }
+      },
+      "settings": {
+        "Method": "GAT_GDC",
+        "use_gdc": true,
+        "gdc_method": "ppr",
+        "gdc_alpha": 0.15,
+        "gdc_k": "auto",
+        "lpe_dim": 16,
+        "lpe_is_undirected": true,
+        "file_emb_dim": 128,
+        "hidden_channels": 256,
+        "num_layers": 1,
+        "heads": 2,
+        "variational": true,
+        "beta_kl": 0.1,
+        "neg_ratio": 5.0,
+        "epochs": 100,
+        "lr": 0.001,
+        "dropout": 0.00
+      }
+    },
+
+    {
+      "name": "hgat",
+      "method": "heterogeneous_gat",
+      "output_path": [
+        "HGAT"
+      ],
+      "dataset_overrides": {
+        "Chrome": {
+          "num_layers": 2
+        }
+      },
+      "settings": {
+        "Method": "HGAT",
+        "file_emb_dim": 128,
+        "folder_emb_dim": 128,
+        "lpe_dim": 16,
+        "lpe_is_undirected": false,
+        "hidden_channels": 256,
+        "num_layers": 1,
+        "heads": 2,
+        "variational": true,
+        "beta_kl": 0.2,
+        "neg_ratio": 2.0,
+        "epochs": 100,
+        "lr": 0.001,
+        "dropout": 0.00
+      }
+    }
+  ]
+}

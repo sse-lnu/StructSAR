@@ -1,11 +1,8 @@
 r"""Run the final architecture-recovery experiments.
 
-Typical use from Anaconda Prompt:
+Typical use:
 
-    cd C:\Users\JABEERAK\Architecture_Recovery\NAIM\StructGAT
-    conda activate torchDL
-    $env:PYTHONPATH = "src"
-    python -m structsar.run_experiments --config experiment_config.json
+    PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json
 
 The config controls datasets, methods, output folders, and clustering. The
 global clustering choice can be "kmeans" or "agglomerative"; an experiment can
@@ -34,10 +31,7 @@ options:
                      Optional dataset names to run, for example: --datasets Bash Chrome
 
 How to run:
-  cd C:\\Users\\JABEERAK\\Architecture_Recovery\\NAIM\\StructGAT
-  conda activate torchDL
-  $env:PYTHONPATH = "src"
-  python -m structsar.run_experiments --config experiment_config.json
+  PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json
 
 Run only selected methods:
   python -m structsar.run_experiments --config experiment_config.json --only N2V
@@ -334,7 +328,7 @@ def dataset_k_range(common, dataset):
 
 def format_search_range(k_range):
     values = list(k_range)
-    return f"k={int(min(values))}..{int(max(values))}"
+    return f"{int(min(values))}_to_{int(max(values))}"
 
 
 def load_dataset(data_dir, dataset):
@@ -775,14 +769,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "How to run:\n"
-            "  cd C:\\Users\\JABEERAK\\Architecture_Recovery\\NAIM\\StructGAT\n"
-            "  conda activate torchDL\n"
-            "  python run_experiments.py --config experiment_config.json\n\n"
+            "  PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json\n\n"
             "Run only selected methods:\n"
-            "  python run_experiments.py --config experiment_config.json --only N2V\n"
-            "  python run_experiments.py --config experiment_config.json --only GAT GAT_GDC HGAT\n\n"
+            "  PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --only N2V\n"
+            "  PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --only GAT GAT_GDC HGAT\n\n"
             "Run only selected datasets:\n"
-            "  python run_experiments.py --config experiment_config.json --datasets Bash Chrome\n\n"
+            "  PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --datasets Bash Chrome\n\n"
             "Clustering is controlled in experiment_config.json:\n"
             "  common \"clustering_algorithm\": \"agglomerative\"\n"
             "  N2V experiment \"clustering_algorithm\": \"kmeans\"\n"

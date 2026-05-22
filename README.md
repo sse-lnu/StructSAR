@@ -1,27 +1,32 @@
 # StructSAR
 
-StructSAR is a reproducible experiment package for software architecture recovery with graph embedding and graph neural network models.
+StructSAR is a reproducible experiment package for software architecture recovery using graph embeddings and graph neural networks.
+
+The repository includes the final source code, processed datasets, and ground-truth labels used by the experiment runner. Raw dependency-extraction outputs and notebooks are not included.
 
 ## Repository Layout
 
-- `src/structsar`: source code for graph construction, models, clustering, evaluation, and the experiment runner.
-- `experiment_config.json`: experiment configuration used by the runner.
-- `data/processed`: processed file/module and dependency CSV data.
-- `data/GT`: ground-truth architecture labels.
-
-Raw dependency-extraction outputs are not included.
+```text
+src/structsar/          Source code
+experiment_config.json  Experiment configuration
+data/processed/         Processed file and dependency CSVs
+data/GT/                Ground-truth labels
+requirements.txt        Python dependencies
+```
 
 ## Models
 
-- `N2V`: Node2Vec baseline.
-- `M2V`: MetaPath2Vec baseline.
+The runner supports:
+
+- `N2V`: Node2Vec baseline with KMeans clustering.
+- `M2V`: MetaPath2Vec baseline with agglomerative clustering.
 - `GAT`: homogeneous GAT with dependency edges and Laplacian positional encodings.
 - `GAT_GDC`: homogeneous GAT with GDC/PPR-diffused dependency edges.
-- `HGAT`: heterogeneous GAT with file, folder, and collapsed file-dependency relations.
+- `HGAT`: heterogeneous GAT with file, folder, and collapsed dependency relations.
 
 ## Clone
 
-This repository uses Git LFS for processed datasets. Install Git LFS before cloning.
+This repository uses Git LFS for processed datasets.
 
 ```bash
 git lfs install
@@ -32,22 +37,20 @@ git lfs pull
 
 ## Install
 
-Create and activate a Python environment, then install the required scientific Python and PyTorch Geometric stack for your platform.
-
-Minimum Python packages used by the runner include:
+Create a Python environment, then install dependencies:
 
 ```bash
-pip install numpy pandas scikit-learn tqdm
+python -m pip install -r requirements.txt
 ```
 
-Install PyTorch and PyTorch Geometric following the official instructions for your CUDA/CPU setup:
+PyTorch and PyTorch Geometric should match your CPU/CUDA setup. If the generic install above does not match your system, install them using the official instructions:
 
 - https://pytorch.org/get-started/locally/
 - https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html
 
-## Run
+## Run Experiments
 
-Run all configured datasets and all methods:
+Run all configured methods and datasets:
 
 ```bash
 PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json
@@ -67,7 +70,7 @@ PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.js
 PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --only GAT --datasets Chrome
 ```
 
-On Windows PowerShell, set `PYTHONPATH` first:
+On Windows PowerShell:
 
 ```powershell
 $env:PYTHONPATH = "src"
@@ -76,36 +79,24 @@ python -m structsar.run_experiments --config experiment_config.json
 
 ## Configuration
 
-The main configuration file is `experiment_config.json`.
+Edit `experiment_config.json` to choose datasets, methods, model hyperparameters, and evaluation behavior.
 
-Important options:
+Common options:
 
-- `common.evaluate`: when `true`, writes evaluation metrics; when `false`, writes file-to-cluster assignments.
-- `common.exact_k` or `common.n_clusters`: exact number of clusters for `exact_k`.
-- `common.k_min` and `common.k_max`: search range for the `search` clustering row.
+- `common.evaluate`: `true` writes metrics; `false` writes file-to-cluster assignments.
+- `common.exact_k` or `common.n_clusters`: exact number of clusters for the `exact_k` row.
+- `common.k_min` and `common.k_max`: cluster search range for the `search` row.
 - `common.k_range_overrides`: dataset-specific search ranges.
-- `common.neighbor_batch_size`: minibatch neighbor fanout, default `10`.
+- `common.num_runs`: number of repeated runs.
 - `common.batch_size`: minibatch training batch size, default `1024`.
-- `common.inference_batch_size`: minibatch inference batch size, default `1024`.
+- `common.neighbor_batch_size`: minibatch neighbor fanout, default `10`.
+- `common.minibatch_threshold_files`: file-count threshold for GAT minibatching, default `5000`.
 
-Clustering defaults:
-
-- `N2V`: KMeans.
-- `M2V`, `GAT`, `GAT_GDC`, `HGAT`: agglomerative clustering.
-
-Each evaluated run writes two rows per dataset and method: one `exact_k` row and one `search` row.
-
-## Minibatching
-
-`GAT` and `GAT_GDC` automatically switch to minibatch training when a dataset has more than `common.minibatch_threshold_files` files. The default threshold is `5000`, so Chrome uses minibatching by default.
-
-Minibatch training is implemented in `src/structsar/models/homogeneous_gat.py` and is launched through the single runner `src/structsar/run_experiments.py`.
+`GAT` and `GAT_GDC` automatically use minibatch training for large systems such as Chrome.
 
 ## Outputs
 
-Results are written under `Results/<Model>/results.csv`.
-
-Example:
+Each method writes one combined CSV containing all selected datasets:
 
 ```text
 Results/N2V/results.csv
@@ -115,9 +106,7 @@ Results/GAT_GDC/results.csv
 Results/HGAT/results.csv
 ```
 
-Each method writes one combined CSV containing all selected datasets.
-
-Result columns:
+Metric CSV columns:
 
 ```text
 Model, Dataset, run_id, clustering, algorithm, n_clusters, search_range,
@@ -125,9 +114,13 @@ mojofm, a2a, c2c_cvg_33, c2c_cvg_50, c2c_cvg_66, c2c_cvg_80,
 ari, normalized_turbomq, turbomq, total_pipeline_seconds
 ```
 
-`search_range` uses a spreadsheet-safe format such as `k=5..20`.
+`search_range` is written in a spreadsheet-safe format, for example:
 
-When `common.evaluate` is `false`, assignment JSON files are written instead, containing each file and its assigned cluster.
+```text
+5_to_20
+```
+
+When `common.evaluate` is `false`, assignment JSON files are written under the corresponding `Results/<Model>/` folder.
 
 ## Help
 

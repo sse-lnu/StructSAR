@@ -24,7 +24,7 @@
     ],
     "include_datasets": [],
     "exclude_datasets": [],
-    "num_runs": 100,
+    "num_runs": 1,
     "flush_every": 1,
     "random_state": null,
     "clustering_algorithm": "agglomerative",

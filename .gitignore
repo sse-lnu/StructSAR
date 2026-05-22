@@ -6,6 +6,7 @@ __pycache__/
 Results/
 .claude/
 data/raw/
+data/*.csv
 tools/
 gat_gdc_experiment_runner.py
 minibatch_runner.py

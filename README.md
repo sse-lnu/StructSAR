@@ -2,7 +2,7 @@
 
 StructSAR is a reproducible experiment package for software architecture recovery using graph embeddings and graph neural networks.
 
-The repository includes the final source code, processed datasets, and ground-truth labels used by the experiment runner. Raw dependency-extraction outputs and notebooks are not included.
+The repository includes the final source code, processed datasets, and ground-truth labels used by the experiment runner.
 
 ## Repository Layout
 

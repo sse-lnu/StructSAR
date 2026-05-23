@@ -48,8 +48,8 @@ Clustering is controlled in experiment_config.json:
 GAT minibatching:
   GAT and GAT_GDC use minibatching automatically when file count exceeds common.minibatch_threshold_files.
 
-GAT_GDC uses dataset-specific top-k values when known. If gdc_k is "auto",
-the runner picks the nearest known profile by graph size and average degree.
+GAT_GDC uses dataset-specific paper settings when provided. For user-supplied
+datasets it applies documented layer and GDC top-k fallback rules.
 
 Outputs are saved under Results/N2V, Results/M2V, Results/GAT, Results/GAT_GDC, and Results/HGAT.
 With common.evaluate=false, outputs are JSON file-to-cluster assignments.
@@ -102,7 +102,7 @@ else:
     )
 
 
-DATASETS = {
+PAPER_DATASETS = {
     "A.UML": ("argouml.csv", "argouml_deps.csv"),
     "Ant": ("ant.csv", "ant_deps.csv"),
     "AS4": ("archstudio.csv", "archstudio_deps.csv"),
@@ -121,6 +121,26 @@ DATASETS = {
     "Chrome": ("chromium.csv", "chromium_deps.csv"),
 }
 
+
+def configured_datasets(common):
+    datasets = dict(PAPER_DATASETS)
+    for name, files in (common.get("custom_datasets") or {}).items():
+        if isinstance(files, dict):
+            node_file = files.get("nodes", files.get("node_file"))
+            dep_file = files.get("dependencies", files.get("dep_file"))
+        elif isinstance(files, (list, tuple)) and len(files) == 2:
+            node_file, dep_file = files
+        else:
+            raise ValueError(
+                f"custom_datasets[{name!r}] must define 'nodes' and 'dependencies' file names."
+            )
+        if not node_file or not dep_file:
+            raise ValueError(
+                f"custom_datasets[{name!r}] must define 'nodes' and 'dependencies' file names."
+            )
+        datasets[str(name)] = (str(node_file), str(dep_file))
+    return datasets
+
 METHOD_DEFAULT_ALGORITHM = {
     "negar": "agglomerative",
     "metapath2vec": "agglomerative",
@@ -132,25 +152,27 @@ METHOD_DEFAULT_ALGORITHM = {
 GDC_K_BY_DATASET = {
     "HDC": 16,
     "HDF": 16,
-    "Bash": 32,
+    "Bash": 64,
     "C.Img": 32,
     "AS4": 64,
     "Hadoop": 64,
     "JabRef": 64,
     "A.UML": 128,
     "TeamMates": 128,
+    "Chrome": 32,
 }
 
 GDC_K_PROFILES = {
     "HDC": 16,
     "HDF": 16,
-    "Bash": 32,
+    "Bash": 64,
     "C.Img": 32,
     "AS4": 64,
     "Hadoop": 64,
     "JabRef": 64,
     "A.UML": 128,
     "TeamMates": 128,
+    "Chrome": 32,
 }
 
 
@@ -178,17 +200,17 @@ def apply_random_state(seed):
     torch.cuda.manual_seed_all(seed)
 
 
-def selected_datasets(common):
-    names = list(common.get("datasets") or DATASETS.keys())
+def selected_datasets(common, datasets):
+    names = list(common.get("datasets") or datasets.keys())
     include = common.get("include_datasets") or []
     exclude = set(common.get("exclude_datasets") or [])
     if include:
         allowed = set(include)
         names = [name for name in names if name in allowed]
     names = [name for name in names if name not in exclude]
-    unknown = [name for name in names if name not in DATASETS]
+    unknown = [name for name in names if name not in datasets]
     if unknown:
-        raise ValueError(f"Unknown dataset names: {unknown}. Available datasets: {sorted(DATASETS)}")
+        raise ValueError(f"Unknown dataset names: {unknown}. Available datasets: {sorted(datasets)}")
     return names
 
 
@@ -331,8 +353,9 @@ def format_search_range(k_range):
     return f"{int(min(values))}_to_{int(max(values))}"
 
 
-def load_dataset(data_dir, dataset):
-    node_file, dep_file = DATASETS[dataset]
+def load_dataset(data_dir, dataset, datasets=None):
+    datasets = PAPER_DATASETS if datasets is None else datasets
+    node_file, dep_file = datasets[dataset]
     data_dir = Path(data_dir)
     df = pd.read_csv(data_dir / node_file)
     deps = pd.read_csv(data_dir / dep_file)
@@ -359,11 +382,11 @@ def choose_gdc_k_from_profile(dataset, df, deps):
     best_dataset = None
     best_distance = float("inf")
     for profile_dataset in GDC_K_PROFILES:
-        if profile_dataset not in DATASETS:
+        if profile_dataset not in PAPER_DATASETS:
             continue
         if CURRENT_DATA_DIR is None:
             raise ValueError("CURRENT_DATA_DIR is not set before GDC top-k selection.")
-        profile_df, profile_deps = load_dataset(CURRENT_DATA_DIR, profile_dataset)
+        profile_df, profile_deps = load_dataset(CURRENT_DATA_DIR, profile_dataset, PAPER_DATASETS)
         profile_files, _, profile_degree = graph_profile(profile_df, profile_deps)
         profile_log_size = np.log2(max(profile_files, 2))
         distance = ((target_log_size - profile_log_size) / 4.0) ** 2 + ((target_degree - profile_degree) / 3.0) ** 2
@@ -375,11 +398,45 @@ def choose_gdc_k_from_profile(dataset, df, deps):
 
 
 CURRENT_DATA_DIR = None
+CURRENT_DATASETS = None
 
 
-def resolve_dataset_settings(settings, method, dataset, df, deps):
+def ground_truth_module_count(df):
+    if "Module" not in df.columns:
+        return 0
+    labels = df["Module"].astype(str).str.strip().str.lower()
+    labels = labels[~labels.isin({"", "nan", "none", "unmapped", "__none__"})]
+    return int(labels.nunique())
+
+
+def general_gat_gdc_settings(df):
+    files = int(df["File"].nunique()) if "File" in df.columns else int(len(df))
+    modules = ground_truth_module_count(df)
+    num_layers = 1 if files > 500 and modules > 10 else 2
+    if files < 300:
+        gdc_k = 16
+    elif files <= 432:
+        gdc_k = 32
+    else:
+        gdc_k = 64
+    return num_layers, gdc_k, files, modules
+
+
+def resolve_dataset_settings(settings, method, dataset, df, deps, dataset_override=None, is_custom_dataset=False):
     settings = dict(settings)
+    dataset_override = {} if dataset_override is None else dict(dataset_override)
     if method == "homogeneous_gat" and settings.get("use_gdc", False):
+        if is_custom_dataset:
+            num_layers, default_gdc_k, files, modules = general_gat_gdc_settings(df)
+            if "num_layers" not in dataset_override:
+                settings["num_layers"] = num_layers
+            if "gdc_k" not in dataset_override:
+                settings["gdc_k"] = default_gdc_k
+            print(
+                f"GAT_GDC | {dataset} | generalization rule: gdc_k={settings['gdc_k']}, "
+                f"num_layers={settings['num_layers']} (files={files}, GT_modules={modules})"
+            )
+            return settings
         gdc_k = settings.get("gdc_k", "auto")
         if gdc_k is None or str(gdc_k).strip().lower() in {"", "auto", "best"}:
             settings["gdc_k"] = choose_gdc_k_from_profile(dataset, df, deps)
@@ -610,17 +667,19 @@ def result_row(dataset, method_name, run_id, cluster_row, timing, k_range):
 
 
 def run(config, only_experiments=None, only_datasets=None):
-    global CURRENT_DATA_DIR
+    global CURRENT_DATA_DIR, CURRENT_DATASETS
     common = config.get("common", {})
     data_dir = common.get("data_dir", "data/processed")
     CURRENT_DATA_DIR = data_dir
+    available_datasets = configured_datasets(common)
+    CURRENT_DATASETS = available_datasets
     out_dir = Path(common.get("out_dir", "Results"))
-    datasets = selected_datasets(common)
+    datasets = selected_datasets(common, available_datasets)
     if only_datasets:
         wanted_datasets = set(only_datasets)
-        unknown = sorted(wanted_datasets - set(DATASETS))
+        unknown = sorted(wanted_datasets - set(available_datasets))
         if unknown:
-            raise ValueError(f"Unknown dataset names: {unknown}. Available datasets: {sorted(DATASETS)}")
+            raise ValueError(f"Unknown dataset names: {unknown}. Available datasets: {sorted(available_datasets)}")
         datasets = [dataset for dataset in datasets if dataset in wanted_datasets]
         if not datasets:
             raise ValueError(f"No datasets matched --datasets {sorted(wanted_datasets)}")
@@ -648,7 +707,7 @@ def run(config, only_experiments=None, only_datasets=None):
     dataset_store = {}
     for dataset in datasets:
         data_start = time.perf_counter()
-        df, deps = load_dataset(data_dir, dataset)
+        df, deps = load_dataset(data_dir, dataset, available_datasets)
         require_ground_truth(dataset, df, evaluate)
         dataset_store[dataset] = {
             "df": df,
@@ -670,8 +729,17 @@ def run(config, only_experiments=None, only_datasets=None):
             store = dataset_store[dataset]
             df = store["df"]
             deps = store["deps"]
-            settings = deep_update(base_settings, exp.get("dataset_overrides", {}).get(dataset, {}))
-            settings = resolve_dataset_settings(settings, method, dataset, df, deps)
+            dataset_override = exp.get("dataset_overrides", {}).get(dataset, {})
+            settings = deep_update(base_settings, dataset_override)
+            settings = resolve_dataset_settings(
+                settings,
+                method,
+                dataset,
+                df,
+                deps,
+                dataset_override=dataset_override,
+                is_custom_dataset=dataset not in PAPER_DATASETS,
+            )
             method_name = settings.get("Method", method_name)
             k_range = dataset_k_range(common, dataset)
             save_path = result_path(exp_dir, dataset) if evaluate else assignment_path(exp_dir, dataset)
@@ -781,9 +849,8 @@ def main():
             "  With evaluation enabled, each selected algorithm writes exact_k + silhouette search rows.\n\n"
             "GAT minibatching:\n"
             "  GAT and GAT_GDC use minibatching automatically when file count exceeds common.minibatch_threshold_files.\n\n"
-            "GAT_GDC gdc_k:\n"
-            "  Known winners are set per dataset in experiment_config.json.\n"
-            "  Use \"gdc_k\": \"auto\" for Chrome or future datasets; the runner picks by graph size and average degree.\n\n"
+            "GAT_GDC custom datasets:\n"
+            "  Paper datasets use their configured values; user-supplied datasets use the documented fallback rules.\n\n"
             "Outputs are saved under Results/N2V, Results/M2V, Results/GAT, Results/GAT_GDC, and Results/HGAT.\n"
             "With common.evaluate=false, outputs are JSON file-to-cluster assignments."
         ),

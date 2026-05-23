@@ -163,6 +163,10 @@
           "gdc_k": 64,
           "num_layers": 2
         },
+        "Lucene": {
+          "gdc_k": 64,
+          "num_layers": 2
+        },
         "TeamMates": {
           "gdc_k": 128
         },
@@ -182,7 +186,7 @@
         "use_gdc": true,
         "gdc_method": "ppr",
         "gdc_alpha": 0.15,
-        "gdc_k": "auto",
+        "gdc_k": 64,
         "lpe_dim": 16,
         "lpe_is_undirected": true,
         "file_emb_dim": 128,

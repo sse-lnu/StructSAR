@@ -94,6 +94,41 @@ Common options:
 
 `GAT` and `GAT_GDC` automatically use minibatch training for large systems such as Chrome.
 
+## Use Your Own Dataset
+
+Place two processed CSV files in `data/processed`:
+
+- a file table with `File` and, for evaluation, `Module` columns;
+- a dependency table with `Source_File`, `Target_File`, `Dependency_Type`, and `Dependency_Count` columns.
+
+Add the dataset in `common`:
+
+```json
+"datasets": ["MySystem"],
+"custom_datasets": {
+  "MySystem": {
+    "nodes": "mysystem.csv",
+    "dependencies": "mysystem_deps.csv"
+  }
+}
+```
+
+Then run:
+
+```bash
+PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --datasets MySystem
+```
+
+For user-supplied datasets, `GAT_GDC` uses these fallback rules unless the dataset is explicitly overridden in the experiment configuration:
+
+- More than `500` files and more than `10` ground-truth modules: `1` GAT layer.
+- Otherwise: `2` GAT layers.
+- Fewer than `300` files: `gdc_k = 16`.
+- From `300` through `432` files: `gdc_k = 32`.
+- More than `432` files: `gdc_k = 64`.
+
+The paper datasets retain their explicit settings in `experiment_config.json`.
+
 ## Outputs
 
 Each method writes one combined CSV containing all selected datasets:

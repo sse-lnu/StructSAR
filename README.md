@@ -149,8 +149,6 @@ mojofm, a2a, c2c_cvg_33, c2c_cvg_50, c2c_cvg_66, c2c_cvg_80,
 ari, normalized_turbomq, turbomq, total_pipeline_seconds
 ```
 
-For evaluation runs, `total_pipeline_seconds` is measured separately per row. The `exact_k` row includes model runtime plus exact-k clustering and evaluation. The `search` row includes model runtime plus search clustering and evaluation.
-
 When `common.evaluate` is `false`, runtime rows are saved in one CSV:
 
 ```text
@@ -165,7 +163,6 @@ search_range, total_pipeline_seconds, assignment_file
 ```
 
 Cluster-label assignment JSON files are still written under the corresponding `Results/<Model>/` folder.
-Non-evaluation runs use the same row-level timing rule: exact-k and search assignments get separate `total_pipeline_seconds` values.
 
 ## Help
 

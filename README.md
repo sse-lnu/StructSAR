@@ -83,7 +83,7 @@ Edit `experiment_config.json` to choose datasets, methods, model hyperparameters
 
 Common options:
 
-- `common.evaluate`: `true` writes metrics; `false` writes file-to-cluster assignments.
+- `common.evaluate`: `true` writes metrics; `false` writes runtime summary rows and file-to-cluster assignments.
 - `common.exact_k` or `common.n_clusters`: exact number of clusters for the `exact_k` row.
 - `common.k_min` and `common.k_max`: cluster search range for the `search` row.
 - `common.k_range_overrides`: dataset-specific search ranges.
@@ -149,7 +149,20 @@ mojofm, a2a, c2c_cvg_33, c2c_cvg_50, c2c_cvg_66, c2c_cvg_80,
 ari, normalized_turbomq, turbomq, total_pipeline_seconds
 ```
 
-When `common.evaluate` is `false`, assignment JSON files are written under the corresponding `Results/<Model>/` folder.
+When `common.evaluate` is `false`, runtime rows are saved in one CSV:
+
+```text
+Results/no_eval_results.csv
+```
+
+Non-evaluation runtime CSV columns:
+
+```text
+Method, Dataset, run_id, clustering, algorithm, n_clusters,
+search_range, total_pipeline_seconds, assignment_file
+```
+
+Cluster-label assignment JSON files are still written under the corresponding `Results/<Model>/` folder.
 
 ## Help
 

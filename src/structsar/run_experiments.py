@@ -51,8 +51,8 @@ GAT minibatching:
 GAT_GDC uses dataset-specific paper settings when provided. For user-supplied
 datasets it applies documented layer and GDC top-k fallback rules.
 
-Outputs are saved under Results/N2V, Results/M2V, Results/GAT, Results/GAT_GDC, and Results/HGAT.
-With common.evaluate=false, outputs are JSON file-to-cluster assignments.
+Evaluation outputs are saved under Results/N2V, Results/M2V, Results/GAT, Results/GAT_GDC, and Results/HGAT.
+With common.evaluate=false, runtime rows are saved in Results/no_eval_results.csv and labels are saved as JSON files.
 """
 
 if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
@@ -225,6 +225,10 @@ def result_path(exp_dir, dataset=None):
     return Path(exp_dir) / "results.csv"
 
 
+def no_eval_result_path(out_dir):
+    return Path(out_dir) / "no_eval_results.csv"
+
+
 def assignment_path(exp_dir, dataset):
     return Path(exp_dir) / f"{slug(dataset)}_clusters.json"
 
@@ -285,6 +289,38 @@ def append_assignment_json(path, run_payload):
             pass
     payload["runs"].append(run_payload)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+NO_EVAL_RESULT_COLUMNS = [
+    "Method",
+    "Dataset",
+    "run_id",
+    "clustering",
+    "algorithm",
+    "n_clusters",
+    "search_range",
+    "total_pipeline_seconds",
+    "assignment_file",
+]
+
+
+def append_plain_csv(rows, path, columns):
+    if not rows:
+        return
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df = pd.DataFrame(rows).reindex(columns=columns)
+    if not path.exists():
+        df.to_csv(path, index=False)
+        return
+    old = pd.read_csv(path)
+    all_columns = list(old.columns)
+    for col in columns:
+        if col not in all_columns:
+            all_columns.append(col)
+    if list(old.columns) != all_columns:
+        old.reindex(columns=all_columns).to_csv(path, index=False)
+    df.reindex(columns=all_columns).to_csv(path, mode="a", header=False, index=False)
 
 
 def normalize_clustering_algorithm(value):
@@ -692,6 +728,7 @@ def run(config, only_experiments=None, only_datasets=None):
     cache_dir = Path(cache_dir_value) if cache_dir_value else out_dir / "embedding_cache"
     cache_dir = cache_dir if use_embedding_cache else None
     memory_cache = {}
+    no_eval_csv = no_eval_result_path(out_dir)
 
     experiments = list(config.get("experiments", []))
     if only_experiments:
@@ -742,13 +779,15 @@ def run(config, only_experiments=None, only_datasets=None):
             )
             method_name = settings.get("Method", method_name)
             k_range = dataset_k_range(common, dataset)
-            save_path = result_path(exp_dir, dataset) if evaluate else assignment_path(exp_dir, dataset)
+            assignment_file = assignment_path(exp_dir, dataset)
+            save_path = result_path(exp_dir, dataset) if evaluate else assignment_file
             done = (
                 completed_run_ids(save_path, dataset, method_name, rows_per_run=rows_per_run)
                 if evaluate
                 else completed_assignment_run_ids(save_path, dataset, method_name)
             )
             rows = []
+            no_eval_rows = []
 
             if done:
                 print(f"{method_name} | {dataset} | skipped {len(done)} completed run(s)")
@@ -810,7 +849,21 @@ def run(config, only_experiments=None, only_datasets=None):
                         "total_pipeline_seconds": pipeline_seconds,
                         "assignments": assignments,
                     })
+                    no_eval_rows.append({
+                        "Method": method_name,
+                        "Dataset": dataset,
+                        "run_id": int(run_id),
+                        "clustering": "exact_k",
+                        "algorithm": algorithm,
+                        "n_clusters": int(exact_k),
+                        "search_range": format_search_range(k_range),
+                        "total_pipeline_seconds": pipeline_seconds,
+                        "assignment_file": str(assignment_file.relative_to(out_dir)),
+                    })
                     print(f"{method_name} | {dataset} | run {run_id}/{num_runs} | {algorithm} exact_k")
+                    if len(no_eval_rows) >= flush_every:
+                        append_plain_csv(no_eval_rows, no_eval_csv, NO_EVAL_RESULT_COLUMNS)
+                        no_eval_rows.clear()
                     continue
 
                 cluster_rows = clusterer.run_all(exact_k=exact_k, methods=clustering_methods)
@@ -829,6 +882,7 @@ def run(config, only_experiments=None, only_datasets=None):
                     rows.clear()
 
             append_csv(pd.DataFrame(rows), save_path)
+            append_plain_csv(no_eval_rows, no_eval_csv, NO_EVAL_RESULT_COLUMNS)
 
 
 def main():
@@ -851,8 +905,8 @@ def main():
             "  GAT and GAT_GDC use minibatching automatically when file count exceeds common.minibatch_threshold_files.\n\n"
             "GAT_GDC custom datasets:\n"
             "  Paper datasets use their configured values; user-supplied datasets use the documented fallback rules.\n\n"
-            "Outputs are saved under Results/N2V, Results/M2V, Results/GAT, Results/GAT_GDC, and Results/HGAT.\n"
-            "With common.evaluate=false, outputs are JSON file-to-cluster assignments."
+            "Evaluation outputs are saved under Results/N2V, Results/M2V, Results/GAT, Results/GAT_GDC, and Results/HGAT.\n"
+            "With common.evaluate=false, runtime rows are saved in Results/no_eval_results.csv and labels are saved as JSON files."
         ),
     )
     parser.add_argument("--config", default="experiment_config.json", help="Path to the experiment JSON config.")

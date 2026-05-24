@@ -804,7 +804,6 @@ def run(config, only_experiments=None, only_datasets=None):
                 run_settings["auto_minibatch"] = bool(common.get("auto_minibatch_gat", True))
                 run_settings.setdefault("neighbor_batch_size", int(common.get("neighbor_batch_size", 10)))
                 run_settings.setdefault("batch_size", int(common.get("batch_size", 1024)))
-                run_settings.setdefault("inference_batch_size", int(common.get("inference_batch_size", run_settings["batch_size"])))
 
                 pipeline_start = time.perf_counter()
                 z, y_true, model_k, file_names = embed(

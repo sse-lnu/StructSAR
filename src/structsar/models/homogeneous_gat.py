@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch_geometric.data import Data
-from torch_geometric.loader import LinkNeighborLoader, NeighborLoader
+from torch_geometric.loader import LinkNeighborLoader
 from torch_geometric.nn import GATConv
 import torch_geometric.transforms as T
 from torch_geometric.utils import coalesce, negative_sampling, remove_self_loops, to_undirected
@@ -459,7 +459,6 @@ def train_homogeneous_gat_minibatch_embeddings(
     fanout = int(config.get("neighbor_batch_size", 10))
     neighbor_sizes = [fanout] * num_layers
     batch_size = int(config.get("batch_size", 1024))
-    inference_batch_size = int(config.get("inference_batch_size", batch_size))
     loader_workers = int(config.get("loader_workers", 0))
 
     model = MiniBatchGAT(data, config).to(device)
@@ -505,33 +504,15 @@ def train_homogeneous_gat_minibatch_embeddings(
             loss.backward()
             optimizer.step()
 
-    infer_data = Data(edge_index=pos_cpu, num_nodes=num_nodes)
+    full_graph = Data(edge_index=pos_cpu, num_nodes=num_nodes)
     if pos_attr_cpu is not None:
-        infer_data.edge_attr = pos_attr_cpu
-    infer_kwargs = dict(
-        num_neighbors=neighbor_sizes,
-        batch_size=inference_batch_size,
-        input_nodes=torch.arange(num_nodes),
-        shuffle=False,
-        num_workers=loader_workers,
-    )
-    if loader_workers > 0:
-        infer_kwargs["persistent_workers"] = True
-    if pin_memory:
-        infer_kwargs["pin_memory"] = True
-    infer_loader = NeighborLoader(data=infer_data, **infer_kwargs)
+        full_graph.edge_attr = pos_attr_cpu
 
-    out_dim = int(config.get("out_channels", config.get("hidden_channels", 256)))
-    z_out = torch.zeros((num_nodes, out_dim), dtype=torch.float32)
     model.eval()
     with torch.no_grad():
-        for batch in infer_loader:
-            batch = batch.to(device, non_blocking=True)
-            out = model(batch)
-            z = out[0] if variational else out
-            seed_count = int(batch.batch_size)
-            seed_nodes = batch.n_id[:seed_count].cpu()
-            z_out[seed_nodes] = z[:seed_count].detach().cpu()
+        full_graph = full_graph.to(device, non_blocking=True)
+        out = model(full_graph)
+        z_out = (out[0] if variational else out).detach().cpu()
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

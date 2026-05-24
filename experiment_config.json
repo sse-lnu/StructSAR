@@ -8,7 +8,6 @@
     "minibatch_threshold_files": 5000,
     "neighbor_batch_size": 10,
     "batch_size": 1024,
-    "inference_batch_size": 1024,
     "datasets": [
       "A.UML",
       "AS4",

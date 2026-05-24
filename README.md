@@ -92,7 +92,7 @@ Common options:
 - `common.neighbor_batch_size`: minibatch neighbor fanout, default `10`.
 - `common.minibatch_threshold_files`: file-count threshold for GAT minibatching, default `5000`.
 
-`GAT` and `GAT_GDC` automatically use minibatch training for large systems such as Chrome.
+`GAT` and `GAT_GDC` automatically use minibatch training for large systems such as Chrome, then compute final embeddings with full-graph inference.
 
 ## Use Your Own Dataset
 

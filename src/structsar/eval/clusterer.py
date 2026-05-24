@@ -224,14 +224,33 @@ class Clusterer:
         methods = self.ALL_METHODS if methods is None else list(methods)
         rows = []
         for method in methods:
-            if method in {"kmean_exact_k", "kmeans_exact_k"}:
-                rows.append(self.kmean_exact_k(exact_k))
-            elif method in {"exact_k", "agglomerative_exact_k"}:
-                rows.append(self.exact_k(exact_k))
-            elif method == "kmeans_search":
-                rows.append(self.kmeans_search())
-            elif method == "agglomerative_search":
-                rows.append(self.agglomerative_search())
-            else:
-                raise ValueError(f"Unknown clustering method: {method}. Available: {self.ALL_METHODS}")
+            rows.append(self.run_method(method, exact_k))
         return rows
+
+    def run_method(self, method, exact_k):
+        if method in {"kmean_exact_k", "kmeans_exact_k"}:
+            return self.kmean_exact_k(exact_k)
+        if method in {"exact_k", "agglomerative_exact_k"}:
+            return self.exact_k(exact_k)
+        if method == "kmeans_search":
+            return self.kmeans_search()
+        if method == "agglomerative_search":
+            return self.agglomerative_search()
+        raise ValueError(f"Unknown clustering method: {method}. Available: {self.ALL_METHODS}")
+
+    def run_method_labels(self, method, exact_k=None):
+        if method in {"kmean_exact_k", "kmeans_exact_k"}:
+            labels = self.exact_k_labels(exact_k, algorithm="kmeans")
+            return {"clustering": "exact_k", "algorithm": "kmeans", "n_clusters": int(exact_k)}, labels
+        if method in {"exact_k", "agglomerative_exact_k"}:
+            labels = self.exact_k_labels(exact_k, algorithm="agglomerative")
+            return {"clustering": "exact_k", "algorithm": "agglomerative", "n_clusters": int(exact_k)}, labels
+        if method == "kmeans_search":
+            k = self._kmeans_search_k()
+            labels = KMeans(n_clusters=int(k), n_init=10).fit_predict(self.x)
+            return {"clustering": "search", "algorithm": "kmeans", "n_clusters": int(k)}, labels
+        if method == "agglomerative_search":
+            k = self._agglomerative_search_k()
+            labels = AgglomerativeClustering(n_clusters=int(k), linkage="ward").fit_predict(self.x)
+            return {"clustering": "search", "algorithm": "agglomerative", "n_clusters": int(k)}, labels
+        raise ValueError(f"Unknown clustering method: {method}. Available: {self.ALL_METHODS}")

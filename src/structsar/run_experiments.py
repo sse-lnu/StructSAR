@@ -256,7 +256,7 @@ def completed_run_ids(path, dataset, method_name, rows_per_run):
     return set(counts[counts >= int(rows_per_run)].index.astype(int).tolist())
 
 
-def completed_assignment_run_ids(path, dataset, method_name):
+def completed_assignment_run_ids(path, dataset, method_name, rows_per_run=1):
     path = Path(path)
     if not path.exists():
         return set()
@@ -265,15 +265,16 @@ def completed_assignment_run_ids(path, dataset, method_name):
     except (json.JSONDecodeError, OSError):
         return set()
     runs = payload.get("runs", []) if isinstance(payload, dict) else []
-    done = set()
+    counts = {}
     for run in runs:
         if not isinstance(run, dict):
             continue
         run_dataset = run.get("Dataset", run.get("dataset"))
         run_model = run.get("Model", run.get("method"))
         if run_dataset == dataset and run_model == method_name and "run_id" in run:
-            done.add(int(run["run_id"]))
-    return done
+            run_id = int(run["run_id"])
+            counts[run_id] = counts.get(run_id, 0) + 1
+    return {run_id for run_id, count in counts.items() if count >= int(rows_per_run)}
 
 
 def append_assignment_json(path, run_payload):
@@ -351,6 +352,30 @@ def clustering_methods_for_algorithm(algorithm):
     if algorithm == "agglomerative":
         return ["agglomerative_exact_k", "agglomerative_search"]
     raise ValueError("clustering algorithm must be 'kmeans' or 'agglomerative'.")
+
+
+def exact_clustering_method(algorithm):
+    if algorithm == "kmeans":
+        return "kmeans_exact_k"
+    if algorithm == "agglomerative":
+        return "agglomerative_exact_k"
+    raise ValueError("clustering algorithm must be 'kmeans' or 'agglomerative'.")
+
+
+def search_clustering_method(algorithm):
+    if algorithm == "kmeans":
+        return "kmeans_search"
+    if algorithm == "agglomerative":
+        return "agglomerative_search"
+    raise ValueError("clustering algorithm must be 'kmeans' or 'agglomerative'.")
+
+
+def no_eval_clustering_methods(algorithm, exact_k):
+    methods = []
+    if exact_k is not None and int(exact_k) > 0:
+        methods.append(exact_clustering_method(algorithm))
+    methods.append(search_clustering_method(algorithm))
+    return methods
 
 
 def exact_k_from_config(common, dataset):
@@ -760,7 +785,7 @@ def run(config, only_experiments=None, only_datasets=None):
         exp_dir = experiment_dir(out_dir, exp)
         algorithm = clustering_algorithm_for_experiment(exp, method, common)
         clustering_methods = clustering_methods_for_algorithm(algorithm)
-        rows_per_run = 1 if not evaluate else len(clustering_methods)
+        rows_per_run = len(clustering_methods)
 
         for dataset in datasets:
             store = dataset_store[dataset]
@@ -784,7 +809,7 @@ def run(config, only_experiments=None, only_datasets=None):
             done = (
                 completed_run_ids(save_path, dataset, method_name, rows_per_run=rows_per_run)
                 if evaluate
-                else completed_assignment_run_ids(save_path, dataset, method_name)
+                else completed_assignment_run_ids(save_path, dataset, method_name, rows_per_run=rows_per_run)
             )
             rows = []
             no_eval_rows = []
@@ -819,7 +844,7 @@ def run(config, only_experiments=None, only_datasets=None):
                     cache_dir=cache_dir,
                 )
                 exact_k = exact_k_from_config(common, dataset) or model_k
-                if exact_k is None or int(exact_k) <= 0:
+                if evaluate and (exact_k is None or int(exact_k) <= 0):
                     raise ValueError(
                         f"{dataset} needs common.exact_k or common.n_clusters before clustering can run."
                     )
@@ -831,49 +856,62 @@ def run(config, only_experiments=None, only_datasets=None):
 
                 clusterer = Clusterer(z, y_true, k_range=k_range, df_deps=deps, node_names=file_names)
                 if not evaluate:
-                    labels = clusterer.exact_k_labels(exact_k, algorithm=algorithm)
-                    pipeline_seconds = round(float(store["data_build_seconds"]) + (time.perf_counter() - pipeline_start), 4)
-                    assignments = [
-                        {"file": str(file_name), "cluster": int(label)}
-                        for file_name, label in zip(file_names, labels.astype(int))
-                    ]
-                    append_assignment_json(save_path, {
-                        "Model": method_name,
-                        "Dataset": dataset,
-                        "run_id": int(run_id),
-                        "algorithm": algorithm,
-                        "clustering": "exact_k",
-                        "n_clusters": int(exact_k),
-                        "search_range": format_search_range(k_range),
-                        "total_pipeline_seconds": pipeline_seconds,
-                        "assignments": assignments,
-                    })
-                    no_eval_rows.append({
-                        "Method": method_name,
-                        "Dataset": dataset,
-                        "run_id": int(run_id),
-                        "clustering": "exact_k",
-                        "algorithm": algorithm,
-                        "n_clusters": int(exact_k),
-                        "search_range": format_search_range(k_range),
-                        "total_pipeline_seconds": pipeline_seconds,
-                        "assignment_file": str(assignment_file.relative_to(out_dir)),
-                    })
-                    print(f"{method_name} | {dataset} | run {run_id}/{num_runs} | {algorithm} exact_k")
+                    data_build_seconds = float(store["data_build_seconds"])
+                    embedding_seconds = time.perf_counter() - pipeline_start
+                    for clustering_method in no_eval_clustering_methods(algorithm, exact_k):
+                        clustering_start = time.perf_counter()
+                        cluster_row, labels = clusterer.run_method_labels(clustering_method, exact_k=exact_k)
+                        pipeline_seconds = round(
+                            data_build_seconds + embedding_seconds + (time.perf_counter() - clustering_start),
+                            4,
+                        )
+                        assignments = [
+                            {"file": str(file_name), "cluster": int(label)}
+                            for file_name, label in zip(file_names, labels.astype(int))
+                        ]
+                        append_assignment_json(save_path, {
+                            "Model": method_name,
+                            "Dataset": dataset,
+                            "run_id": int(run_id),
+                            "algorithm": cluster_row["algorithm"],
+                            "clustering": cluster_row["clustering"],
+                            "n_clusters": int(cluster_row["n_clusters"]),
+                            "search_range": format_search_range(k_range),
+                            "total_pipeline_seconds": pipeline_seconds,
+                            "assignments": assignments,
+                        })
+                        no_eval_rows.append({
+                            "Method": method_name,
+                            "Dataset": dataset,
+                            "run_id": int(run_id),
+                            "clustering": cluster_row["clustering"],
+                            "algorithm": cluster_row["algorithm"],
+                            "n_clusters": int(cluster_row["n_clusters"]),
+                            "search_range": format_search_range(k_range),
+                            "total_pipeline_seconds": pipeline_seconds,
+                            "assignment_file": str(assignment_file.relative_to(out_dir)),
+                        })
+                        print(
+                            f"{method_name} | {dataset} | run {run_id}/{num_runs} | "
+                            f"{cluster_row['algorithm']} {cluster_row['clustering']}"
+                        )
                     if len(no_eval_rows) >= flush_every:
                         append_plain_csv(no_eval_rows, no_eval_csv, NO_EVAL_RESULT_COLUMNS)
                         no_eval_rows.clear()
                     continue
 
-                cluster_rows = clusterer.run_all(exact_k=exact_k, methods=clustering_methods)
                 data_build_seconds = float(store["data_build_seconds"])
-                timing = {
-                    "total_pipeline_seconds": round(data_build_seconds + (time.perf_counter() - pipeline_start), 4),
-                }
-                rows.extend(
-                    result_row(dataset, method_name, run_id, cluster_row, timing, k_range)
-                    for cluster_row in cluster_rows
-                )
+                embedding_seconds = time.perf_counter() - pipeline_start
+                for clustering_method in clustering_methods:
+                    clustering_start = time.perf_counter()
+                    cluster_row = clusterer.run_method(clustering_method, exact_k)
+                    timing = {
+                        "total_pipeline_seconds": round(
+                            data_build_seconds + embedding_seconds + (time.perf_counter() - clustering_start),
+                            4,
+                        ),
+                    }
+                    rows.append(result_row(dataset, method_name, run_id, cluster_row, timing, k_range))
 
                 print(f"{method_name} | {dataset} | run {run_id}/{num_runs} | {algorithm} exact_k+search")
                 if len(rows) >= flush_every * rows_per_run:

@@ -114,7 +114,7 @@
       },
       "settings": {
         "Method": "GAT",
-        "lpe_dim": 32,
+        "lpe_dim": 16,
         "lpe_is_undirected": true,
         "file_emb_dim": 128,
         "num_layers": 2,

@@ -511,14 +511,17 @@ def resolve_dataset_settings(settings, method, dataset, df, deps, dataset_overri
 
 def build_dataset_cache(df, deps, common=None):
     common = {} if common is None else dict(common)
+    default_collapse = bool(common.get("collapse_hgat_dependencies", True))
     structural = HeterogeneousData(
         df,
         deps,
         folder_nodes=True,
-        collapse_dependency_types=bool(common.get("collapse_hgat_dependencies", True)),
+        collapse_dependency_types=default_collapse,
     )
     return {
         "structural": structural,
+        "structural_by_collapse": {default_collapse: structural},
+        "default_collapse_hgat_dependencies": default_collapse,
         "node2vec": Node2VecGraph(df, deps),
         "metapath": {},
         "minibatch": None,
@@ -527,20 +530,42 @@ def build_dataset_cache(df, deps, common=None):
     }
 
 
-def cached_lpe_features(dataset_cache, method, settings):
+def hgat_collapse_dependency_types(dataset_cache, settings):
+    if "collapse_dependency_types" in settings:
+        return bool(settings["collapse_dependency_types"])
+    if "collapse_hgat_dependencies" in settings:
+        return bool(settings["collapse_hgat_dependencies"])
+    return bool(dataset_cache.get("default_collapse_hgat_dependencies", True))
+
+
+def structural_graph_for_settings(dataset_cache, df, deps, settings):
+    collapse = hgat_collapse_dependency_types(dataset_cache, settings)
+    graphs = dataset_cache.setdefault("structural_by_collapse", {})
+    if collapse not in graphs:
+        graphs[collapse] = HeterogeneousData(
+            df,
+            deps,
+            folder_nodes=True,
+            collapse_dependency_types=collapse,
+        )
+    return graphs[collapse]
+
+
+def cached_lpe_features(dataset_cache, method, settings, graph=None):
     lpe_dim = settings.get("lpe_dim")
     if lpe_dim is None:
         return None
     default_undirected = method == "homogeneous_gat"
-    key = (method, int(lpe_dim), bool(settings.get("lpe_is_undirected", default_undirected)))
+    graph_key = id(graph) if graph is not None else None
+    key = (method, graph_key, int(lpe_dim), bool(settings.get("lpe_is_undirected", default_undirected)))
     if key in dataset_cache["lpe"]:
         return dataset_cache["lpe"][key]
 
-    graph = dataset_cache["structural"]
+    graph = dataset_cache["structural"] if graph is None else graph
     if method == "homogeneous_gat":
-        features = homo_lpe_input(graph, lpe_dim=key[1], is_undirected=key[2])
+        features = homo_lpe_input(graph, lpe_dim=key[2], is_undirected=key[3])
     elif method in {"heterogeneous_gat", "structural_gat"}:
-        features = hetero_lpe_features(graph, key[1], is_undirected=key[2])
+        features = hetero_lpe_features(graph, key[2], is_undirected=key[3])
     else:
         features = None
     dataset_cache["lpe"][key] = features
@@ -703,8 +728,8 @@ def embed(method, df, deps, settings, dataset, run_id, dataset_cache, memory_cac
     if method in {"heterogeneous_gat", "structural_gat"}:
         if settings.get("file_feature_init") == "negar":
             raise ValueError("GAT variants no longer support file_feature_init='negar'.")
-        graph = dataset_cache["structural"]
-        file_features = cached_lpe_features(dataset_cache, method, settings)
+        graph = structural_graph_for_settings(dataset_cache, df, deps, settings)
+        file_features = cached_lpe_features(dataset_cache, method, settings, graph=graph)
         z = maybe_cached_embedding(
             method, dataset, run_id, settings, seed, cache_dir, memory_cache,
             lambda: train_heterogeneous_gat_embeddings(graph, settings, file_features=file_features),

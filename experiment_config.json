@@ -214,6 +214,37 @@
       },
       "settings": {
         "Method": "HGAT",
+        "collapse_dependency_types": true,
+        "file_emb_dim": 128,
+        "folder_emb_dim": 128,
+        "lpe_dim": 16,
+        "lpe_is_undirected": false,
+        "hidden_channels": 256,
+        "num_layers": 1,
+        "heads": 2,
+        "variational": true,
+        "beta_kl": 0.2,
+        "neg_ratio": 2.0,
+        "epochs": 100,
+        "lr": 0.001,
+        "dropout": 0.00
+      }
+    },
+
+    {
+      "name": "hgat_td",
+      "method": "heterogeneous_gat",
+      "output_path": [
+        "HGAT_TD"
+      ],
+      "dataset_overrides": {
+        "Chrome": {
+          "num_layers": 2
+        }
+      },
+      "settings": {
+        "Method": "HGAT_TD",
+        "collapse_dependency_types": false,
         "file_emb_dim": 128,
         "folder_emb_dim": 128,
         "lpe_dim": 16,

@@ -164,10 +164,10 @@ install does not match your system, follow the official instructions:
 
 A GPU is recommended but not required; the smaller systems run comfortably on CPU.
 
-## Quick start (sanity check)
+## Example run
 
-Run one method on the smallest system to confirm the setup works. After
-dependencies are installed, this finishes in seconds:
+A minimal run — one method (`GAT`) on the smallest system (`Bash`). It finishes
+in seconds and writes its results under `Results/GAT/`:
 
 ```bash
 PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --only GAT --datasets Bash
@@ -179,6 +179,9 @@ On Windows PowerShell:
 $env:PYTHONPATH = "src"
 python -m structsar.run_experiments --config experiment_config.json --only GAT --datasets Bash
 ```
+
+From here, drop `--only`/`--datasets` to run everything, or list other methods
+and systems (see below).
 
 ## Reproduce the paper
 

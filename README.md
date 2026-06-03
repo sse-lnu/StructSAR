@@ -31,49 +31,78 @@ variational graph autoencoder).
 
 ## Methods
 
-| Key in config | Paper name | Input graph | Learner | Addresses |
-|---------------|-----------|-------------|---------|-----------|
-| `N2V`     | node2vec      | Homogeneous SDG                       | Biased random walks + Skip-gram, KMeans clustering | RQ1 |
-| `M2V`     | MetaPath2Vec  | Heterogeneous (SDG + folders)         | Meta-path walks + type-aware Skip-gram | RQ2 |
-| `GAT`     | GAT           | Homogeneous SDG                       | GAT encoder in a VGAE, with Laplacian positional encodings | RQ1 |
-| `GAT_GDC` | GAT-DC        | Homogeneous SDG, PPR-diffused (GDC)   | GAT encoder in a VGAE over a diffusion-rewired graph | RQ1 |
-| `HGAT`    | HGAT          | Heterogeneous (folders, merged deps)  | Relation-aware GAT encoder in a VGAE | RQ2 |
-| `HGAT_TD` | HGAT-TD       | Heterogeneous, **typed** dependencies | Relation-aware GAT, one relation per dependency type | RQ2 |
+**Homogeneous** methods (RQ1) operate on the file–file dependency graph alone.
+**Heterogeneous** methods (RQ2) extend the same graph with folder nodes and
+folder–file containment edges.
 
-All variants except `HGAT_TD` merge the different file–file dependency types
-into a single edge; `HGAT_TD` keeps each dependency type as a separate relation.
-All GAT-based variants share a self-supervised objective: a dot-product decoder
-reconstructs the observed dependency edges from the learned embeddings.
+| Method | Config name | What it adds |
+|--------|-------------|--------------|
+| **Homogeneous** | | |
+| node2vec | `N2V`     | Biased random walks + Skip-gram (KMeans clustering, NEGAR setup) |
+| GAT      | `GAT`     | GAT encoder in a VGAE, with Laplacian positional encodings |
+| GAT-DC   | `GAT_GDC` | GAT in a VGAE over a PPR-diffused (GDC) graph |
+| **Heterogeneous** | | |
+| MetaPath2Vec | `M2V`     | Meta-path random walks + type-aware Skip-gram |
+| HGAT         | `HGAT`    | Relation-aware GAT in a VGAE (dependency types merged into one edge) |
+| HGAT-TD      | `HGAT_TD` | Same as HGAT, but keeps each dependency type as a separate relation |
+
+All GAT-based variants share one self-supervised objective: a dot-product
+decoder reconstructs the observed dependency edges from the learned embeddings.
 Embeddings are clustered with agglomerative (Ward) clustering for every method
-except `N2V`, which uses KMeans following the NEGAR setup. The number of
-clusters is either fixed or selected from a candidate range via the silhouette
-score.
+except `N2V`, which uses KMeans. The number of clusters is either fixed or
+selected from a candidate range via the silhouette score.
 
-## Benchmark systems
+## Datasets and file formats
 
-The package ships preprocessed graphs and ground-truth architectures for the
-11 open-source Java, C, and C++ systems used in the paper. Static dependencies
-were extracted with [Depends](https://github.com/multilang-depends/depends) and
-aggregated to the file level to match the per-file ground truth.
+The package ships preprocessed graphs and ground-truth architectures for 11
+open-source Java, C, and C++ systems used in the paper (ArgoUML, ArchStudio 4,
+Commons-Imaging, Hadoop, JabRef, Lucene, TeamMates, Bash, Chromium, and two
+OpenHarmony systems). Static dependencies were extracted with
+[Depends](https://github.com/multilang-depends/depends) and aggregated to the
+file level to match the per-file ground truth. The ground-truth architectures
+are reused from prior work (Garcia et al., the SARIF benchmark, Olsson et al.,
+and SAEroCon) so results are directly comparable to earlier studies. Chromium is
+the largest system and serves as the scalability stress test.
 
-| Language | System | Config name | GT modules | Files | Folders | Edges |
-|----------|--------|-------------|-----------:|------:|--------:|------:|
-| Java   | ArgoUML         | `A.UML`     | 14 | 766    | 58  | 3,754   |
-| Java   | ArchStudio 4    | `AS4`       | 57 | 583    | 115 | 1,826   |
-| Java   | Commons-Imaging | `C.Img`     | 21 | 329    | 41  | 1,565   |
-| Java   | Hadoop          | `Hadoop`    | 62 | 591    | 55  | 3,648   |
-| Java   | JabRef          | `JabRef`    | 6  | 1,180  | 127 | 6,126   |
-| Java   | Lucene          | `Lucene`    | 7  | 1,054  | 188 | 6,424   |
-| Java   | TeamMates       | `TeamMates` | 15 | 778    | 42  | 6,721   |
-| C/C++  | Bash            | `Bash`      | 13 | 292    | 11  | 1,010   |
-| C/C++  | Chromium        | `Chrome`    | 69 | 18,343 | 999 | 145,492 |
-| C/C++  | Distributed Camera (OpenHarmony) | `HDC` | 11 | 207 | 87 | 543 |
-| C/C++  | Drivers Framework (OpenHarmony)  | `HDF` | 9  | 153 | 26 | 535 |
+Each system is stored as three files. Their config names are in
+`experiment_config.json`; the per-system file names are in `PAPER_DATASETS` in
+`src/structsar/run_experiments.py`.
 
-Ground-truth architectures are reused from prior work
-(Garcia et al., the SARIF benchmark, Olsson et al., and SAEroCon) so results are
-directly comparable to earlier studies. Chromium is included as the
-scalability stress test.
+### `data/processed/<system>.csv` — entities
+
+One row per source-file member. Columns used by the pipeline:
+
+- `File` — source filename, including path (the graph node identity).
+- `Module` — the architectural module the file belongs to (ground truth).
+- `ID`, `Member_ID` — unique integer IDs for the entity and member.
+- `Member_Name`, `Member_Type` — name and kind of a member (e.g. a function).
+- `Entity` — the fully qualified entity name (e.g. the Java class name).
+
+### `data/processed/<system>_deps.csv` — dependencies
+
+One row per static dependency. Many fields reference entities in the file above.
+
+- `Source_File`, `Target_File` — the two files the dependency connects (the edge).
+- `Dependency_Type` — the kind of dependency, e.g. `Call`, `Import`, `Extend`.
+- `Dependency_Count` — number of such dependencies between source and target.
+- `Source_ID`, `Target_ID` — entity ID references.
+- `Source_Member`, `Target_Member`, `*_Member_Type`, `*_Member_ID` — member-level detail.
+- `Is_Member_Level` — `True` if the dependency is between members rather than files.
+- `Source_Module`, `Target_Module` — the ground-truth module of each endpoint.
+
+The homogeneous methods read only `Source_File`/`Target_File` (merging all
+dependency types into one edge); `HGAT_TD` additionally splits edges by
+`Dependency_Type`; the folder relations used by the heterogeneous methods are
+derived from the directory part of `File`.
+
+### `data/GT/<system>_gt.csv` and `<system>_gt.json` — ground truth
+
+The evaluation labels, provided in two equivalent forms:
+
+- `*_gt.csv` — one row per entity with `Entity`, `Module` (the selected module),
+  `Module_List` (all candidate modules when an entity maps to several), and
+  `is_duplicated`.
+- `*_gt.json` — the same architecture as a nested `group` → `item` structure.
 
 ## Evaluation metrics
 
@@ -277,5 +306,5 @@ details are in the paper sources under `StructSAR/`.
 
 ## License
 
-The source code is released under the BSD 3-Clause License. The data in `data/`
-is dedicated to the public domain (CC0 1.0).
+No license has been set for this repository yet. Until one is added, all rights
+are reserved; please contact the authors before reusing the code or data.

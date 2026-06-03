@@ -166,8 +166,8 @@ A GPU is recommended but not required; the smaller systems run comfortably on CP
 
 ## Example run
 
-A minimal run — one method (`GAT`) on the smallest system (`Bash`). It finishes
-in seconds and writes its results under `Results/GAT/`:
+A minimal run — one method (`GAT`) on one system (`Bash`). It writes its results
+under `Results/GAT/`:
 
 ```bash
 PYTHONPATH=src python -m structsar.run_experiments --config experiment_config.json --only GAT --datasets Bash

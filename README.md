@@ -119,22 +119,6 @@ runner reports complementary metrics rather than relying on a single criterion:
   cohesion vs. inter-cluster coupling).
 - **ARI** — Adjusted Rand Index, chance-corrected agreement with the ground truth.
 
-## Repository layout
-
-```text
-src/structsar/            Source code
-  run_experiments.py        Experiment runner (entry point)
-  data_builders/            Homogeneous / heterogeneous / walk graph builders
-  models/                   node2vec, metapath2vec, homogeneous & heterogeneous GAT
-  eval/                     Clustering and metric evaluation
-  metrics/                  MoJoFM, A2A, C2C, TurboMQ implementations
-experiment_config.json    Datasets, methods, hyperparameters, evaluation settings
-data/processed/           Preprocessed file (`*.csv`) and dependency (`*_deps.csv`) tables
-data/GT/                  Ground-truth labels (`*_gt.csv` / `*_gt.json`)
-requirements.txt          Python dependencies
-Results/                  Output metrics and cluster assignments (created on run)
-```
-
 ## Clone
 
 The processed datasets are tracked with Git LFS.
@@ -307,7 +291,3 @@ Cluster-label assignments are saved as JSON under the corresponding
 If you use this package, please cite the accompanying paper. Author and venue
 details are in the paper sources under `StructSAR/`.
 
-## License
-
-No license has been set for this repository yet. Until one is added, all rights
-are reserved; please contact the authors before reusing the code or data.

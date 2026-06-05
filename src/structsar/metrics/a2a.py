@@ -1,8 +1,9 @@
-import networkx as nx
-import copy
+import numpy as np
+from scipy.optimize import linear_sum_assignment
+
 
 class ReadOnlyCluster:
-    def __init__(self, name, entites = None):
+    def __init__(self, name, entites=None):
         self.name = name
         self.entities = set()
         if entites:
@@ -11,7 +12,7 @@ class ReadOnlyCluster:
 
     def add(self, e):
         self.entities.add(e)
-        
+
     def __len__(self):
         return len(self.entities)
 
@@ -32,12 +33,6 @@ class ReadOnlyArchitecture:
 
     def __len__(self):
         return len(self.entities)
-
-    def difference(self, e: set) -> 'ReadOnlyArchitecture':
-        result = copy.deepcopy(self)
-        for k in result.entities.keys():
-            result.entities[k].entities -= e
-        return result
 
     @staticmethod
     def read_rsf(fn) -> 'ReadOnlyArchitecture':
@@ -63,50 +58,21 @@ class ReadOnlyArchitecture:
             result.entity_location_map[entity_id] = result.entities[cid]
         return result
 
-                
-class MCFP:
-    def __init__(self, src, tgt):
-        self._balance(src, tgt)
-        self.match_set = self._solve(src, tgt)
-
-    def _balance(self, src, tgt):
-        smaller = src if len(src) < len(tgt) else tgt
-        for i in range(abs(len(src) - len(tgt))):
-            smaller.entities[f'dummy_{i}'] = ReadOnlyCluster(f'dummy_{i}')
-
-    def _solve(self, src, tgt):
-        graph = self._make_graph(src, tgt)
-
-        graph.nodes['source']['demand'] = -len(src)
-        graph.nodes['sink']['demand'] = len(tgt)
-        nx.set_edge_attributes(graph, 1, 'capacity')
-
-        fcost, fdict = nx.capacity_scaling(graph)
-        self.cost = fcost
-        
-    def _make_graph(self, src, tgt) -> nx.DiGraph:
-        graph = nx.DiGraph()
-        graph.add_node('source')
-        graph.add_node('sink')
-        first_pass = True
-        for k1, v1 in src.entities.items():
-            vert1 = f'source_202311111800_{k1}'
-            graph.add_node(vert1)
-            graph.add_edge('source', vert1, weight=0)
-            
-            for k2, v2 in tgt.entities.items():
-                cost = len(v1.entities ^ v2.entities)
-                if first_pass:
-                    vert2 = f'target_202311111800_{k2}'
-                    graph.add_node(vert2)
-                    graph.add_edge(vert2, 'sink', weight=0)
-                graph.add_edge(vert1, vert2, weight=cost)
-
-        first_pass = False
-
-        return graph
 
 class A2ACalculator:
+    """Architecture-to-architecture distance.
+
+    The moved-entity term is the minimum-cost matching between the two
+    architectures' clusters, where the cost of pairing clusters is the size of
+    the symmetric difference of their entity sets. This is a balanced linear
+    assignment, solved here with scipy.optimize.linear_sum_assignment.
+
+    The cluster intersections needed for the costs are read off an O(N)
+    contingency table via |S_i ^ T_j| = |S_i| + |T_j| - 2|S_i n T_j|, which
+    replaces the previous networkx min-cost-flow formulation. Results are
+    numerically identical; this implementation is dramatically faster.
+    """
+
     def __init__(self, src, tgt, mode='file'):
         assert mode in ['file', 'array']
         self.mode = mode
@@ -121,20 +87,65 @@ class A2ACalculator:
         return (1 - self._numerator() / self._denominator()) * 100
 
     def _numerator(self):
-        num_cluster_diff = abs(len(self.source) - len(self.target))
-        src_ents = self.source.get_ents()
-        tgt_ents = self.target.get_ents()
+        src, tgt = self.source, self.target
+        p_clusters = len(src)
+        g_clusters = len(tgt)
+        num_cluster_diff = abs(p_clusters - g_clusters)
 
+        src_ents = src.get_ents()
+        tgt_ents = tgt.get_ents()
         added_ents = tgt_ents - src_ents
         removed_ents = src_ents - tgt_ents
+        common = src_ents & tgt_ents
 
-        src_trimmed = self.source.difference(removed_ents)
-        tgt_trimmed = self.target.difference(added_ents)
+        # Cluster index maps (stable order of the dict keys).
+        s_idx = {k: i for i, k in enumerate(src.entities.keys())}
+        t_idx = {k: i for i, k in enumerate(tgt.entities.keys())}
 
-        mcfp = MCFP(src_trimmed, tgt_trimmed)
-        num_moved = mcfp.cost / 2
+        # entity -> list of cluster indices it belongs to (entities may be
+        # duplicated across clusters in RSF input).
+        ent_src = {}
+        for k, cluster in src.entities.items():
+            for e in cluster.entities:
+                ent_src.setdefault(e, []).append(s_idx[k])
+        ent_tgt = {}
+        for k, cluster in tgt.entities.items():
+            for e in cluster.entities:
+                ent_tgt.setdefault(e, []).append(t_idx[k])
 
+        # Costs are over the trimmed architectures (entities present in both),
+        # so accumulate sizes and intersections over the common entities only.
+        size_p = np.zeros(p_clusters, dtype=np.int64)
+        size_t = np.zeros(g_clusters, dtype=np.int64)
+        contingency = np.zeros((p_clusters, g_clusters), dtype=np.int64)
+        for e in common:
+            si = ent_src.get(e, ())
+            tj = ent_tgt.get(e, ())
+            for i in si:
+                size_p[i] += 1
+            for j in tj:
+                size_t[j] += 1
+            for i in si:
+                for j in tj:
+                    contingency[i, j] += 1
+
+        num_moved = self._min_move_cost(size_p, size_t, contingency) / 2.0
         return num_cluster_diff + 2 * len(added_ents) + 2 * len(removed_ents) + num_moved
 
+    @staticmethod
+    def _min_move_cost(size_p, size_t, contingency):
+        p, g = len(size_p), len(size_t)
+        k = max(p, g)
+        if k == 0:
+            return 0.0
+        # Balance with dummy (empty) clusters on the smaller side, then solve.
+        sp = np.zeros(k, dtype=np.int64); sp[:p] = size_p
+        st = np.zeros(k, dtype=np.int64); st[:g] = size_t
+        padded = np.zeros((k, k), dtype=np.int64); padded[:p, :g] = contingency
+        cost = sp[:, None] + st[None, :] - 2 * padded   # |S_i ^ T_j|
+        rows, cols = linear_sum_assignment(cost)
+        return float(cost[rows, cols].sum())
+
     def _denominator(self):
-        return len(self.source) + 2 * self.source.count_ents() + len(self.target) + 2 * self.target.count_ents()
+        return (len(self.source) + 2 * self.source.count_ents()
+                + len(self.target) + 2 * self.target.count_ents())

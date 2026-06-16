@@ -1,7 +1,7 @@
 # StructSAR — Graph Embeddings for Software Architecture Recovery
 
 StructSAR is the reproducible replication package for the study
-*Structural Graph Embeddings for Architecture Recovery*
+Graph Embeddings for Software Architecture Recovery*
 (Jabeen, Ericsson, Nordqvist, and Wingkvist, Linnaeus University).
 
 The package recovers the **module-level architecture** of a software system

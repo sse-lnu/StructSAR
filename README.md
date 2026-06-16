@@ -1,4 +1,4 @@
-# StructSAR — Structural Graph Embeddings for Architecture Recovery
+# StructSAR — Graph Embeddings for Software Architecture Recovery
 
 StructSAR is the reproducible replication package for the study
 *Structural Graph Embeddings for Architecture Recovery*
